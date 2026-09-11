@@ -44,7 +44,13 @@ const handleOf = (g) => (g.handle ? '@' + String(g.handle).replace(/^@+/, '') : 
 const firstName = (g) => g.first || String(g.name || '').split(' ')[0] || 'them';
 function fmtTime(iso) { if (!iso) return ''; const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); }
 function fmtDateTime(iso) { if (!iso) return ''; const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); }
-function friendlyErr(e) { const s = String((e && (e.code || e.message)) || e || ''); return /permission|denied/i.test(s) ? 'this link is not allowed to do that' : s.slice(0, 140); }
+function friendlyErr(e) {
+  const s = String((e && (e.code || e.message)) || e || '');
+  if (/permission|denied/i.test(s)) return 'this link is not allowed to do that';
+  if (/operation-not-allowed|admin-restricted/i.test(s)) return 'anonymous sign-in is switched off in Firebase (Authentication → Sign-in method → Anonymous)';
+  if (/network-request-failed|unavailable|offline/i.test(s)) return 'no connection to the database';
+  return s.slice(0, 140);
+}
 function write(promise, failMsg) { if (promise && promise.catch) promise.catch((e) => toast(`${esc(failMsg)}: ${esc(friendlyErr(e))}`, 'err', { ms: 6000 })); }
 
 // Damerau-Levenshtein distance <= 1 (one typo, missing/extra letter or swapped pair).
