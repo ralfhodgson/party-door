@@ -48,11 +48,11 @@ cd party-door && python3 -m http.server 8080
 
 ### 2. Hosting
 
-Any static host works. GitHub Pages: put this folder's contents at the root of
-a public repository (only code lives here, never guest data), enable Pages on
-the `main` branch, and the page is at `https://<user>.github.io/<repo>/`.
-
-Bump `CACHE` in `sw.js` whenever you deploy a change so devices pick it up.
+This repository is served by GitHub Pages from the `gh-pages` branch at
+<https://ralfhodgson.github.io/party-door/>. Only code lives here, never guest
+data. To deploy a change, commit on `main` and run `tools/deploy.sh`, which
+pushes `main` and mirrors it to `gh-pages`. Bump `CACHE` in `sw.js` whenever you
+deploy so devices with the page cached pick up the new version.
 
 ### 3. Load the guest list
 
