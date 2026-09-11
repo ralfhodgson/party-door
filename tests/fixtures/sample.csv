@@ -1,0 +1,5 @@
+Name,Status,RSVP date,Invited By,What's your Instagram handle?,What’s your email?,Is Plus One Of
+Sample Guest,Approved,2026-07-08 13:33:22,,sample.guest,sample@example.com,
+Sample Plusone,Approved,2026-07-09 10:00:00,Sample Guest,,,Sample Guest
+Another Person,Approved,2026-07-10 09:00:00,,another_p,another@example.com,
+Not Coming,Pending,2026-07-10 09:00:00,,,,

@@ -1,0 +1,82 @@
+rules_version = '2';
+// Party door rules. Paste into Firebase console > Firestore Database > Rules > Publish.
+//
+// Roles: a device claims a role by writing roles/{its uid} with the key from
+// the link it opened. The key is checked against private/config, which no
+// client can read. After that:
+//   door  : read guests/meta, check people in / undo, mark pink given, name a plus-one placeholder
+//   adder : door + add walk-ins (and edit/delete the walk-ins it added)
+//   host  : everything, including import, edit, delete, full phone numbers, export
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function cfg() { return get(/databases/$(db)/documents/private/config).data; }
+    function rolePath() { return /databases/$(db)/documents/roles/$(request.auth.uid); }
+    function role() {
+      return signedIn() && exists(rolePath()) ? get(rolePath()).data.role : 'none';
+    }
+    function isHost()  { return role() == 'host'; }
+    function canAdd()  { return role() in ['adder', 'host']; }
+    function canDoor() { return role() in ['door', 'adder', 'host']; }
+    function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+    function ownWalkin() {
+      return resource.data.source == 'walkin' && resource.data.addedByUid == request.auth.uid;
+    }
+
+    // Link keys live here. Create the document by hand in the console; never readable by clients.
+    match /private/{d} {
+      allow read, write: if false;
+    }
+
+    match /roles/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['role', 'k', 'label', 'ua', 'at'])
+        && request.resource.data.k is string
+        && (
+             (request.resource.data.role == 'door'  && request.resource.data.k == cfg().doorKey)
+          || (request.resource.data.role == 'adder' && request.resource.data.k == cfg().addKey)
+          || (request.resource.data.role == 'host'  && request.resource.data.k == cfg().hostKey)
+        );
+      allow delete: if signedIn() && request.auth.uid == uid;
+    }
+
+    match /meta/{d} {
+      allow read: if canDoor();
+      allow write: if isHost();
+    }
+
+    match /guests/{id} {
+      allow read: if canDoor();
+      allow create: if isHost()
+        || ( canAdd()
+             && request.resource.data.source == 'walkin'
+             && request.resource.data.name is string
+             && request.resource.data.name.size() > 0
+             && request.resource.data.name.size() <= 120
+             && request.resource.data.addedByUid == request.auth.uid );
+      allow update: if isHost()
+        || ( canAdd() && ownWalkin() )
+        || ( canDoor()
+             && changed().hasOnly(['checkedIn', 'checkedInAt', 'checkedInBy', 'checkedInByUid',
+                                   'pinkGiven', 'pinkGivenAt', 'updatedAt',
+                                   'name', 'first', 'last', 'search', 'plusNamed'])
+             && ( resource.data.get('plusNamed', true) == false
+                  || !changed().hasAny(['name', 'first', 'last', 'search', 'plusNamed']) ) );
+      allow delete: if isHost() || ( canAdd() && ownWalkin() );
+    }
+
+    // Full phone numbers: host only.
+    match /private_guests/{id} {
+      allow read, write: if isHost();
+    }
+
+    // Audit trail of door actions.
+    match /events/{id} {
+      allow read: if isHost();
+      allow create: if canDoor();
+      allow update, delete: if false;
+    }
+  }
+}

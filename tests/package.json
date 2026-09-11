@@ -1,0 +1,14 @@
+{
+  "name": "party-door-tests",
+  "private": true,
+  "scripts": {
+    "rules": "firebase emulators:exec --only firestore --project demo-party \"node rules.test.cjs\"",
+    "qa": "node browser.qa.cjs"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.0",
+    "firebase": "^12.0.0",
+    "firebase-tools": "^15.0.0",
+    "playwright": "^1.56.0"
+  }
+}
