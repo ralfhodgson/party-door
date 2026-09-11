@@ -1,6 +1,15 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
+const { spawn } = require('child_process');
+const net = require('net');
+const SITE_DIR = process.env.SITE_DIR || path.join(__dirname, '..');
+function serve(dir, port) {
+  const child = spawn('python3', ['-m', 'http.server', String(port), '--bind', '127.0.0.1'], { cwd: dir, stdio: 'ignore' });
+  child.unref();
+  const waitPort = () => new Promise((resolve) => { const tryOnce = () => { const sock = net.connect(port, '127.0.0.1'); sock.once('connect', () => { sock.end(); resolve(); }); sock.once('error', () => setTimeout(tryOnce, 150)); }; tryOnce(); });
+  return { child, ready: waitPort() };
+}
 const OUT = path.join(__dirname, 'screenshots'); fs.mkdirSync(OUT, { recursive: true });
 const BASE = 'http://127.0.0.1:8080/';
 const CSV = process.argv[2] || path.join(__dirname, 'fixtures', 'sample.csv'); // a Partiful export to import during the run
@@ -10,6 +19,9 @@ const ok = (name, cond, extra = '') => { results.push(`${cond ? 'PASS' : 'FAIL'}
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 (async () => {
+  const server = serve(SITE_DIR, 8080);
+  await server.ready;
+  process.on('exit', () => { try { server.child.kill(); } catch {} });
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ viewport: { width: 820, height: 1180 }, deviceScaleFactor: 1, hasTouch: true, acceptDownloads: true });
   const track = (page, label) => {
@@ -24,17 +36,27 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // ---- gate without link
   await door.goto(BASE + '?demo=1&nosw=1');
   await door.waitForSelector('.gate h1');
-  ok('no-link gate shows', (await door.textContent('.gate h1')).includes('needs a link'));
-  await door.screenshot({ path: `${OUT}/00-gate.png` });
+  ok('demo menu shows when opened without a link', (await door.textContent('.gate h1')).includes('Demo'));
+  await door.screenshot({ path: `${OUT}/00-demo-menu.png` });
+  await door.click('[data-act="demo-enter"][data-view="door"]');
+  await door.waitForSelector('#q');
+  ok('demo menu opens the door view straight into search (one door, no picker)', true);
+  await door.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
 
   // ---- door link -> station pick
   await door.goto(BASE + '?demo=1&nosw=1#door/x');
-  await door.waitForSelector('[data-act="pick-station"]');
-  await door.screenshot({ path: `${OUT}/01-station.png` });
-  await door.click('[data-act="pick-station"][data-station="Door 1"]');
   await door.waitForSelector('#q');
-  ok('door view mounted', !!(await door.$('#results')));
-  ok('station shown', (await door.textContent('#station-btn')).trim() === 'Door 1');
+  ok('door view mounted straight into search', !!(await door.$('#results')));
+  ok('no door picker or door button anywhere', !(await door.$('[data-act="pick-station"], #station-btn')));
+  // alphabetical full list under the search box
+  const listNames = await door.$$eval('#results .row .name', (els) => els.map((e) => e.textContent));
+  const sortedCopy = [...listNames].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
+  const totalGuests = await door.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('party-door-demo-v2')).guests).length);
+  ok('full list shown when nothing typed', listNames.length === totalGuests, `${listNames.length} rows`);
+  ok('full list is alphabetical', JSON.stringify(listNames) === JSON.stringify(sortedCopy), listNames.slice(0, 3).join(' | '));
+  const letters = await door.$$eval('#results .letter', (els) => els.map((e) => e.textContent));
+  ok('letter dividers present and ordered', letters.length > 5 && JSON.stringify(letters) === JSON.stringify([...letters].sort()), letters.join(''));
+  await door.screenshot({ path: `${OUT}/01-door-list.png` });
   const statsText = await door.textContent('#stats');
   ok('stats rendered', /arrived/.test(statsText) && /pink/.test(statsText), statsText.replace(/\s+/g, ' ').trim());
   await door.screenshot({ path: `${OUT}/02-door-empty.png` });
@@ -57,6 +79,19 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   names = await door.$$eval('#results .row .name', (els) => els.map((e) => e.textContent));
   ok('reversed partial "cl am" finds Amelia Clarke first', names[0] === 'Amelia Clarke', names.slice(0, 3).join(' | '));
 
+  // all-field search: handle substring, inviter, note
+  await door.fill('#q', 'ameliac');
+  await sleep(100);
+  names = await door.$$eval('#results .row .name', (els) => els.map((e) => e.textContent));
+  ok('handle substring "ameliac" finds the @ameliac_ guest', names.includes('Amelia Clarke'), names.slice(0, 3).join(' | '));
+  await door.fill('#q', '@amelia.clarke');
+  await sleep(100);
+  names = await door.$$eval('#results .row .name', (els) => els.map((e) => e.textContent));
+  ok('full handle with @ and dot finds the guest', names[0] === 'Amelia Clarke', names.slice(0, 3).join(' | '));
+  await door.fill('#q', 'arriving late');
+  await sleep(100);
+  names = await door.$$eval('#results .row .name', (els) => els.map((e) => e.textContent));
+  ok('note text is searchable', names.length === 1 && /Arthur/.test(names[0]), names.join(' | '));
   await door.fill('#q', 'zzzzqq');
   await sleep(100);
   ok('no-match hint shown', (await door.textContent('#results')).includes('No one called'));
@@ -83,7 +118,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await door.screenshot({ path: `${OUT}/05-toast.png` });
   ok('search cleared after check-in', (await door.inputValue('#q')) === '');
   const state = await door.evaluate(() => { const s = JSON.parse(localStorage.getItem('party-door-demo-v2')); return { main: s.guests.g_demo000, kid: s.guests.g_demo000_p1 }; });
-  ok('main guest checked in with station + pinkGiven', state.main.checkedIn && state.main.checkedInBy === 'Door 1' && state.main.pinkGiven === true);
+  ok('main guest checked in with station + pinkGiven', state.main.checkedIn && state.main.checkedInBy === 'Door' && state.main.pinkGiven === true);
   ok('plus-one checked in too', state.kid.checkedIn === true);
 
   // ---- recent tab + undo
@@ -182,6 +217,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await host.fill('#hq', 'jordan');
   await sleep(100);
   ok('host guest search works', (await host.textContent('#host-list')).includes('Jordan Wells'));
+  await host.fill('#hq', 'priya.ahmed@example');
+  await sleep(100);
+  ok('host can search by email', (await host.textContent('#host-list')).includes('Priya'), (await host.textContent('#host-list')).slice(0, 80));
+  await host.fill('#hq', 'thompson@');
+  await sleep(100);
+  ok('host email substring search', /Thompson/.test(await host.textContent('#host-list')));
   await host.fill('#hq', 'priya');
   await sleep(100);
   ok('host sees private email on a listed guest', /@example\.com/.test(await host.textContent('#host-list')));
@@ -299,6 +340,32 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(300);
   await phone.screenshot({ path: `${OUT}/15-phone-sheet.png` });
 
+  // ---- small Android phone (360 wide): door, sheet, add form, host dashboard
+  const android = await ctx.newPage(); track(android, 'android');
+  await android.setViewportSize({ width: 360, height: 740 });
+  await android.goto(BASE + '?demo=1&nosw=1#door/x');
+  await android.waitForSelector('#q');
+  let ov = await android.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  ok('no horizontal overflow at 360px (door list)', ov <= 0, `${ov}px`);
+  await android.fill('#q', 'amelia'); await sleep(100);
+  await android.click('#results .row[data-id="g_demo_dup"] .btn');
+  await android.waitForSelector('#sheet.open'); await sleep(300);
+  ov = await android.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  ok('no horizontal overflow at 360px (sheet open)', ov <= 0, `${ov}px`);
+  const sheetFits = await android.evaluate(() => { const r = document.querySelector('#sheet').getBoundingClientRect(); return r.width <= window.innerWidth + 1 && r.bottom <= window.innerHeight + 1; });
+  ok('sheet fits within a 360px phone screen', sheetFits);
+  const tapTargets = await android.$$eval('#sheet .btn', (els) => els.map((e) => e.getBoundingClientRect().height));
+  ok('sheet buttons are at least 44px tall on a small phone', tapTargets.length > 0 && tapTargets.every((h) => h >= 44), tapTargets.map(Math.round).join(','));
+  await android.screenshot({ path: `${OUT}/17-android-sheet.png` });
+  await android.click('#sheet [data-act="close"]');
+  await android.goto(BASE + '?demo=1&nosw=1#host/x');
+  await android.waitForSelector('.pinpad, #host-main .kpi');
+  if (await android.$('.pinpad')) { for (const d of '1234') await android.click(`[data-act="pin-digit"][data-d="${d}"]`); }
+  await android.waitForSelector('#host-main .kpi');
+  ov = await android.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  ok('no horizontal overflow at 360px (host dashboard)', ov <= 0, `${ov}px`);
+  await android.screenshot({ path: `${OUT}/18-android-host.png` });
+
   // ---- landscape iPad
   await door.setViewportSize({ width: 1180, height: 820 });
   await door.fill('#q', 'harry');
@@ -309,4 +376,6 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   console.log(results.join('\n'));
   console.log(`\n${results.filter((r) => r.startsWith('PASS')).length} passed, ${results.filter((r) => r.startsWith('FAIL')).length} failed`);
   if (errors.length) { console.log('\nBROWSER ERRORS:'); console.log(errors.join('\n')); process.exitCode = 1; } else console.log('\nNo browser console/page errors.');
+  try { server.child.kill(); } catch {}
+  process.exit(process.exitCode || 0);
 })().catch((e) => { console.error('QA SCRIPT CRASHED:', e); console.log(results.join('\n')); process.exit(2); });

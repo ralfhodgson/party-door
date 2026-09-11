@@ -147,3 +147,18 @@ code{background:var(--panel2);padding:2px 6px;border-radius:6px;font-size:14px}
 }
 /* While a sheet is open, keep the toast clear of the sheet's buttons. */
 .sheet.open ~ .toast{bottom:auto;top:calc(16px + env(safe-area-inset-top))}
+
+/* Touch feedback on phones and tablets */
+.btn:active,.row:active,.tabs button:active,.pill[data-act]:active{transform:scale(.985);filter:brightness(1.12)}
+@media (prefers-reduced-motion:reduce){.btn:active,.row:active{transform:none}.sheet{transition:none}}
+/* Small phones */
+@media (max-width:400px){
+  .row{padding:10px 12px;gap:8px}
+  .row .name{font-size:19px}
+  .row .btn{padding:0 12px;font-size:15px;min-height:48px}
+  .sheet h2{font-size:26px}
+  .band{font-size:24px;padding:14px}
+  .actions .btn{min-height:56px;font-size:18px}
+  .searchbar input{font-size:20px;min-height:56px}
+  .kpi b{font-size:26px}
+}
