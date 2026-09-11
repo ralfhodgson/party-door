@@ -242,6 +242,42 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(150);
   ok('guest deleted', !(await host.textContent('#host-list')).includes('Jordan Wells'));
 
+  // pink tab: full list with toggles, filters, search, paste list (add / replace / inherit)
+  await host.click('[data-act="host-tab"][data-tab="pink"]');
+  await host.waitForSelector('#pink-list .row');
+  const pinkBefore = await host.evaluate(() => Object.values(JSON.parse(localStorage.getItem('party-door-demo-v2')).guests).filter((g) => g.pink).length);
+  const totalNow = await host.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('party-door-demo-v2')).guests).length);
+  ok('pink tab lists everyone A to Z with a toggle each', (await host.$$eval('#pink-list .row', (els) => els.length)) === totalNow && (await host.$$eval('#pink-list [data-act="pink-set"]', (els) => els.length)) === totalNow);
+  ok('pink tab has letter dividers', (await host.$$eval('#pink-list .letter', (els) => els.length)) > 5);
+  await host.click('[data-act="pink-filter"][data-f="pink"]'); await sleep(100);
+  ok('Pink only filter shows only pink people', (await host.$$eval('#pink-list .row', (els) => els.length)) === pinkBefore && (await host.$$eval('#pink-list .row .pill.pink', (els) => els.length)) === pinkBefore);
+  await host.click('[data-act="pink-filter"][data-f="all"]'); await sleep(100);
+  await host.fill('#pq', 'ava murphy'); await sleep(100);
+  ok('pink search finds the person', (await host.textContent('#pink-list')).includes('Ava Murphy'));
+  await host.click('#pink-list [data-act="pink-set"][data-v="1"]'); await sleep(150);
+  const ava = await host.evaluate(() => Object.values(JSON.parse(localStorage.getItem('party-door-demo-v2')).guests).find((g) => g.name === 'Ava Murphy'));
+  ok('one-tap Make pink sets the flag', ava.pink === true);
+  ok('row now offers Remove pink', /Remove pink/.test(await host.textContent('#pink-list')));
+  await host.click('[data-act="pink-clear"]'); await sleep(100);
+  await host.click('#pink-paste-box summary');
+  await host.fill('#pink-paste', 'Ben Khan\nJack Nguyen\nNobody Realname');
+  await host.check('#pink-inherit');
+  await host.click('[data-act="pink-apply"][data-mode="add"]');
+  await host.waitForFunction(() => /names found/.test((document.querySelector('#pink-result') || {}).textContent || ''), null, { timeout: 5000 });
+  const res1 = (await host.textContent('#pink-result')).replace(/\s+/g, ' ');
+  ok('paste list reports matches and the unknown name', /2 of 3 names found/.test(res1) && /Nobody Realname/.test(res1), res1.slice(0, 120));
+  const pinkAfter = await host.evaluate(() => { const gs = Object.values(JSON.parse(localStorage.getItem('party-door-demo-v2')).guests); return { jack: gs.find((g) => g.name === 'Jack Nguyen').pink, jackKids: gs.filter((g) => g.plusOf === 'g_demo015').map((g) => g.pink), ava: gs.find((g) => g.name === 'Ava Murphy').pink, total: gs.filter((g) => g.pink).length }; });
+  ok('add mode keeps existing pinks and flags plus-ones when inherit is on', pinkAfter.jack === true && pinkAfter.jackKids.every(Boolean) && pinkAfter.ava === true && pinkAfter.total > pinkBefore, JSON.stringify(pinkAfter));
+  await host.fill('#pink-paste', 'Ava Murphy');
+  await host.uncheck('#pink-inherit');
+  await host.click('[data-act="pink-apply"][data-mode="replace"]');
+  await host.waitForFunction(() => /removed/.test((document.querySelector('#pink-result') || {}).textContent || ''), null, { timeout: 5000 });
+  const onlyAva = await host.evaluate(() => Object.values(JSON.parse(localStorage.getItem('party-door-demo-v2')).guests).filter((g) => g.pink).map((g) => g.name));
+  ok('replace mode leaves exactly the pasted names pink', onlyAva.length === 1 && onlyAva[0] === 'Ava Murphy', onlyAva.join(','));
+  await door.fill('#q', 'ava murphy'); await sleep(200);
+  ok('door shows PINK for the newly flagged guest (live)', /PINK/.test(await door.textContent('#results')));
+  await host.screenshot({ path: `${OUT}/19-host-pink.png` });
+
   // import real CSV
   await host.click('[data-act="host-tab"][data-tab="import"]');
   await host.waitForSelector('#import-file');

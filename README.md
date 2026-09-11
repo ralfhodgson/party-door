@@ -10,7 +10,7 @@ Three links, each doing one job:
 |---|---|---|
 | **Door** `…/#door/<doorKey>` | security | scroll or search the list, check people in, undo, see the wristband colour to hand over, name an unnamed plus-one |
 | **Add** `…/#add/<addKey>` | you and whoever you trust to add people on the night | everything Door can, plus add walk-ins (and edit or delete the ones they added) |
-| **Host** `…/#host/<hostKey>` | you | everything: live dashboard, edit and delete anyone, import the list, export a spreadsheet, settings. Behind a 4-digit PIN on the device. |
+| **Host** `…/#host/<hostKey>` | you | everything: live dashboard, edit and delete anyone, manage the pink list, import the list, export a spreadsheet, settings. Behind a 4-digit PIN on the device. |
 
 A device opens its link once; after that it keeps its role even if the page is
 reloaded or added to the home screen. The keys are checked server-side by the
@@ -78,6 +78,14 @@ check-ins are kept, names and colours are updated.
 Only rows whose status is Approved/Going are imported. Emails and phone numbers
 go to a host-only collection; door devices see the name, the Instagram handle
 (as a tiebreaker for duplicate names) and who invited a plus-one.
+
+## Pink wristbands
+
+Host view → **Pink** tab. Search for a person and tap **Make pink**, or paste a
+list of names and choose **Add these to pink** (keeps existing pinks) or
+**Replace the pink list with these**. Names not found are reported and nothing
+else changes. A switch decides whether plus-ones inherit pink from their inviter.
+The door then shows PINK on the row and BLUE + PINK before the Check in button.
 
 ## On the night
 

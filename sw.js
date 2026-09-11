@@ -1,7 +1,7 @@
 // Service worker: keeps the app shell available if the network drops at load
 // time. Same-origin GETs are served stale-while-revalidate; everything else
 // (Firestore, Google auth) goes straight to the network.
-const CACHE = 'party-door-v3';
+const CACHE = 'party-door-v4';
 const SHELL = ['./', './index.html', './styles.css', './app.js', './store-demo.js', './store-firebase.js',
   './partiful.js', './firebase-config.js', './vendor/firebase.js', './icon-180.png'];
 

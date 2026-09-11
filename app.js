@@ -575,7 +575,7 @@ function deleteGuest(id) {
 }
 
 // ---------- host view ----------
-const HOST_TABS = ['live', 'guests', 'import', 'export', 'settings'];
+const HOST_TABS = ['live', 'guests', 'pink', 'import', 'export', 'settings'];
 function mountHost() {
   S.mounted = 'host';
   appEl.innerHTML = `${headerHtml('Host view', true, false)}
@@ -592,6 +592,10 @@ function renderHostPane(full) {
     case 'guests':
       if (full || !$('#hq')) { main.innerHTML = guestsPaneHtml(); const hq = $('#hq'); hq.addEventListener('input', () => { S.hostQuery = hq.value; renderHostGuestList(); }); }
       renderHostGuestList();
+      break;
+    case 'pink':
+      if (full || !$('#pink-paste')) { main.innerHTML = pinkHtml(); const pq = $('#pq'); pq.addEventListener('input', () => { S.pinkQuery = pq.value; renderPinkLists(); }); }
+      renderPinkLists();
       break;
     case 'import': if (full || !$('#import-file')) main.innerHTML = importHtml(); break;
     case 'export': if (full || !$('#export-msg') || !$('#export-msg').innerHTML) main.innerHTML = exportHtml(); break;
@@ -643,6 +647,90 @@ function renderHostGuestList() {
     return rowHtml(g).replace('</div></div>', `${extra ? `<div class="muted" style="font-size:12px;margin-top:4px">${extra}</div>` : ''}</div></div>`).replace('data-act="open"', 'data-act="edit"').replace(`<button class="btn primary" data-act="open"`, `<button class="btn small" data-act="edit"`).replace('>Check in</button>', '>Edit</button>');
   }).join('') || '<li class="hint">No one matches.</li>') + (list.length > shown.length ? `<li class="hint">Showing ${shown.length} of ${list.length}. Type to narrow it down.</li>` : '');
 }
+// ---------- pink wristband management (host) ----------
+function pinkHtml() {
+  return `<div class="card"><h3>Pink wristbands</h3>
+    <p class="muted" id="pink-count"></p>
+    <p class="muted">Scroll the list and tap <b>Make pink</b> or <b>Remove pink</b>. Changes reach the door straight away.</p>
+    <details id="pink-paste-box"><summary class="btn small">Paste a list of names instead</summary>
+      <p class="muted" style="margin:10px 0 4px">One full name per line, spelt as on the guest list. Names not found are reported and nothing else changes.</p>
+      <div class="field"><textarea id="pink-paste" placeholder="Amelia Clarke&#10;Ben Khan&#10;…"></textarea></div>
+      <label class="switch">Their plus-ones get pink too<input type="checkbox" id="pink-inherit"></label>
+      <div class="actions"><button class="btn pinkbtn" data-act="pink-apply" data-mode="add">Add these to pink</button><button class="btn" data-act="pink-apply" data-mode="replace">Replace the pink list with these</button></div>
+      <div id="pink-result"></div>
+    </details></div>
+    <div class="searchbar"><input id="pq" type="search" placeholder="Search by name, Instagram or inviter…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" value="${esc(S.pinkQuery || '')}"><button class="clear" data-act="pink-clear" aria-label="Clear search">✕</button></div>
+    <div class="inline muted" id="pink-filters" style="margin:8px 0 4px;font-size:13px"></div>
+    <ul class="results" id="pink-list"></ul>`;
+}
+function pinkRowHtml(g) {
+  const kids = S.kids.get(g.id) || [];
+  const pills = [
+    g.pink ? '<span class="pill pink">PINK</span>' : '',
+    g.pinkGiven ? '<span class="pill ok">Pink given</span>' : '',
+    g.source === 'walkin' ? '<span class="pill walkin">Walk-in</span>' : '',
+    g._inviterName ? `<span class="pill plus">+1 of ${esc(g._inviterName)}</span>` : '',
+    kids.length ? `<span class="pill plus">+${kids.length}</span>` : '',
+    g._dup ? '<span class="pill warn">Same name</span>' : '',
+    g.handle ? `<span class="muted">${esc(handleOf(g))}</span>` : '',
+  ].filter(Boolean).join('');
+  return `<li class="row ${g.pink ? 'pinkrow' : ''}" data-act="edit" data-id="${esc(g.id)}"><div class="who"><div class="name">${esc(g.name)}</div><div class="meta">${pills}</div></div>
+    <button class="btn small ${g.pink ? '' : 'pinkbtn'}" data-act="pink-set" data-id="${esc(g.id)}" data-v="${g.pink ? '0' : '1'}">${g.pink ? 'Remove pink' : 'Make pink'}</button></li>`;
+}
+function renderPinkLists() {
+  const st = stats();
+  const count = $('#pink-count');
+  if (count) count.textContent = `${st.pinkTotal} ${st.pinkTotal === 1 ? 'person is' : 'people are'} down for pink · ${st.pinkGiven} handed out so far · ${st.total} on the list.`;
+  const f = S.pinkFilter || 'all';
+  const filters = $('#pink-filters');
+  if (filters) filters.innerHTML = [['all', `Everyone (${st.total})`], ['pink', `Pink only (${st.pinkTotal})`], ['notpink', `Not pink (${st.total - st.pinkTotal})`]].map(([k, label]) => `<button class="pill ${f === k ? 'blue' : ''}" data-act="pink-filter" data-f="${k}">${label}</button>`).join('');
+  const list = $('#pink-list');
+  if (!list) return;
+  const q = (S.pinkQuery || '').trim();
+  let people = q ? search(q) : [...S.guests.values()].sort((a, b) => String(a.name).localeCompare(String(b.name), 'en', { sensitivity: 'base' }));
+  people = people.filter((g) => f === 'all' || (f === 'pink' && g.pink) || (f === 'notpink' && !g.pink));
+  if (!people.length) { list.innerHTML = `<li class="hint">${q ? 'No one matches.' : f === 'pink' ? 'Nobody is down for pink yet. Tap Make pink on someone, or paste a list.' : 'Nobody here.'}</li>`; return; }
+  if (q) { list.innerHTML = people.map(pinkRowHtml).join(''); return; }
+  let html = '', letter = '';
+  for (const g of people) {
+    const L = (norm(g.name)[0] || '#').toUpperCase();
+    if (L !== letter) { letter = L; html += `<li class="letter">${L}</li>`; }
+    html += pinkRowHtml(g);
+  }
+  list.innerHTML = html;
+}
+function setPink(id, v) {
+  const g = S.guests.get(id);
+  if (!g) return;
+  write(S.store.updateGuest(id, { pink: !!v, updatedAt: nowIso() }), 'Could not update pink');
+  S.store.logEvent({ type: v ? 'pink-add' : 'pink-remove', guestId: id, name: g.name, station: 'Host' });
+}
+async function applyPinkList(mode) {
+  const names = ($('#pink-paste').value || '').split(/\r?\n|;/).map((s) => s.trim()).filter(Boolean);
+  const out = $('#pink-result');
+  if (!names.length) { toast('Paste at least one name first', 'err'); return; }
+  const inherit = $('#pink-inherit').checked;
+  const want = new Map(names.map((n) => [norm(n), n]));
+  const matched = new Set(), hits = new Map(), target = new Set();
+  for (const g of S.guests.values()) { const k = g.search || norm(g.name); if (want.has(k)) { target.add(g.id); matched.add(k); hits.set(k, (hits.get(k) || 0) + 1); } }
+  if (inherit) for (const g of S.guests.values()) if (g.plusOf && target.has(g.plusOf)) target.add(g.id);
+  const items = [];
+  for (const g of S.guests.values()) {
+    const pink = mode === 'replace' ? target.has(g.id) : (!!g.pink || target.has(g.id));
+    if (!!g.pink !== pink) items.push({ id: g.id, merge: true, doc: { pink } });
+  }
+  const unmatched = names.filter((n) => !matched.has(norm(n)));
+  const ambiguous = [...hits.entries()].filter(([, c]) => c > 1).map(([k]) => want.get(k));
+  out.innerHTML = '<div class="notice">Saving…</div>';
+  if (items.length) { try { await S.store.importGuests(items); } catch (e) { out.innerHTML = `<div class="notice err">Could not save: ${esc(friendlyErr(e))}</div>`; return; } }
+  S.store.logEvent({ type: 'pink-list', mode, names: names.length, changed: items.length, station: 'Host' });
+  const added = items.filter((i) => i.doc.pink).length, removed = items.filter((i) => !i.doc.pink).length;
+  out.innerHTML = `<div class="notice"><b>${matched.size} of ${names.length}</b> names found · ${added} made pink${mode === 'replace' ? ` · ${removed} removed` : ''}${inherit ? ' · plus-ones included' : ''}.
+    ${ambiguous.length ? `<br>Matched more than one person, all flagged (check under Guests): ${ambiguous.map(esc).join(', ')}` : ''}
+    ${unmatched.length ? `<div class="notice warn" style="margin:8px 0 0">Not found on the list, check the spelling:<br>${unmatched.map(esc).join('<br>')}</div>` : ''}</div>`;
+  toast(`Pink list ${mode === 'replace' ? 'replaced' : 'updated'}: ${[...S.guests.values()].filter((g) => target.has(g.id)).length} people`, 'pink');
+}
+
 function importHtml() {
   return `<div class="card"><h3>Import the guest list</h3>
     <p class="muted">Upload the Partiful export (CSV) or a <code>guests.json</code> made with the import tool. Re-importing is safe: check-ins are kept; names and wristband colours are updated.</p>
@@ -796,6 +884,10 @@ document.addEventListener('click', (e) => {
     case 'clear': S.query = ''; { const q = $('#q'); if (q) { q.value = ''; q.focus(); } } renderResults(); break;
     case 'host-clear': S.hostQuery = ''; { const q = $('#hq'); if (q) { q.value = ''; q.focus(); } } renderHostGuestList(); break;
     case 'host-filter': S.hostFilter = el.dataset.f; renderHostPane(true); break;
+    case 'pink-apply': applyPinkList(el.dataset.mode); break;
+    case 'pink-set': setPink(id, el.dataset.v === '1'); break;
+    case 'pink-clear': S.pinkQuery = ''; { const q = $('#pq'); if (q) { q.value = ''; q.focus(); } } renderPinkLists(); break;
+    case 'pink-filter': S.pinkFilter = el.dataset.f; renderPinkLists(); break;
     case 'open': openSheet({ type: 'guest', id }); break;
     case 'edit': openSheet({ type: 'edit', id }); break;
     case 'checkin': checkInFromSheet(id, false); break;
