@@ -63,7 +63,14 @@ prepare it first:
 node tools/import-partiful.mjs RUSH2026_guests.csv --pink pink.txt --out guests.json
 ```
 
-`pink.txt` is one full name per line for the pink wristbands. The tool reports
+`pink.txt` is one full name per line for the pink wristbands.
+
+To load it without touching a device, run the importer against the live database
+(needs only Python 3):
+
+```sh
+PARTY_HOST_KEY=<host link key> python3 tools/firestore-import.py guests.json --pink-explicit
+``` The tool reports
 statuses seen, plus-ones linked, duplicate names and any pink names it could not
 find on the list. Upload `guests.json` on the Import tab. Re-importing is safe:
 check-ins are kept, names and colours are updated.
