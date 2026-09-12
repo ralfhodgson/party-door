@@ -258,6 +258,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const ava = await host.evaluate(() => Object.values(JSON.parse(localStorage.getItem('party-door-demo-v2')).guests).find((g) => g.name === 'Ava Murphy'));
   ok('one-tap Make pink sets the flag', ava.pink === true);
   ok('row now offers Remove pink', /Remove pink/.test(await host.textContent('#pink-list')));
+  // one-tap on a guest with plus-ones flags the plus-ones too, and removing un-flags them
+  await host.fill('#pq', 'jack nguyen'); await sleep(100);
+  await host.click('#pink-list .row[data-id="g_demo015"] [data-act="pink-set"][data-v="1"]'); await sleep(200);
+  let jackFamily = await host.evaluate(() => { const gs = Object.values(JSON.parse(localStorage.getItem('party-door-demo-v2')).guests); return [gs.find((g) => g.id === 'g_demo015').pink, ...gs.filter((g) => g.plusOf === 'g_demo015').map((g) => g.pink)]; });
+  ok('Make pink on an inviter flags their plus-ones too', jackFamily.length === 3 && jackFamily.every(Boolean), jackFamily.join(','));
+  await host.click('#pink-list .row[data-id="g_demo015"] [data-act="pink-set"][data-v="0"]'); await sleep(200);
+  jackFamily = await host.evaluate(() => { const gs = Object.values(JSON.parse(localStorage.getItem('party-door-demo-v2')).guests); return [gs.find((g) => g.id === 'g_demo015').pink, ...gs.filter((g) => g.plusOf === 'g_demo015').map((g) => g.pink)]; });
+  ok('Remove pink on an inviter un-flags their plus-ones', jackFamily.every((x) => !x), jackFamily.join(','));
   await host.click('[data-act="pink-clear"]'); await sleep(100);
   await host.click('#pink-paste-box summary');
   await host.fill('#pink-paste', 'Ben Khan\nJack Nguyen\nNobody Realname');

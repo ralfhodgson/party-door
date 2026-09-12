@@ -664,7 +664,7 @@ function pinkHtml() {
     <details id="pink-paste-box"><summary class="btn small">Paste a list of names instead</summary>
       <p class="muted" style="margin:10px 0 4px">One full name per line, spelt as on the guest list. Names not found are reported and nothing else changes.</p>
       <div class="field"><textarea id="pink-paste" placeholder="Amelia Clarke&#10;Ben Khan&#10;…"></textarea></div>
-      <label class="switch">Their plus-ones get pink too<input type="checkbox" id="pink-inherit"></label>
+      <label class="switch">Their plus-ones get pink too<input type="checkbox" id="pink-inherit" checked></label>
       <div class="actions"><button class="btn pinkbtn" data-act="pink-apply" data-mode="add">Add these to pink</button><button class="btn" data-act="pink-apply" data-mode="replace">Replace the pink list with these</button></div>
       <div id="pink-result"></div>
     </details></div>
@@ -708,11 +708,15 @@ function renderPinkLists() {
   }
   list.innerHTML = html;
 }
+// Plus-ones follow their inviter: making a guest pink flags their plus-ones too, removing it un-flags them.
 function setPink(id, v) {
   const g = S.guests.get(id);
   if (!g) return;
+  const kids = (S.kids.get(id) || []).filter((k) => !!k.pink !== !!v);
   write(S.store.updateGuest(id, { pink: !!v, updatedAt: nowIso() }), 'Could not update pink');
-  S.store.logEvent({ type: v ? 'pink-add' : 'pink-remove', guestId: id, name: g.name, station: 'Host' });
+  for (const k of kids) write(S.store.updateGuest(k.id, { pink: !!v, updatedAt: nowIso() }), 'Could not update pink');
+  S.store.logEvent({ type: v ? 'pink-add' : 'pink-remove', guestId: id, name: g.name, plusOnes: kids.length, station: 'Host' });
+  if (kids.length) toast(`${esc(g.name)} ${v ? 'and' : 'and'} ${kids.length} plus-one${kids.length === 1 ? '' : 's'} ${v ? 'now pink' : 'no longer pink'}`, v ? 'pink' : 'ok');
 }
 async function applyPinkList(mode) {
   const names = ($('#pink-paste').value || '').split(/\r?\n|;/).map((s) => s.trim()).filter(Boolean);
