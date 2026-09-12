@@ -325,6 +325,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   ok('re-import without a pink list keeps pink flag set in the app', after.pink === true);
   ok('re-import keeps a note written in the app', after.note === 'host note');
 
+  // host Guests tab lists everyone with no cap
+  await host.click('[data-act="host-tab"][data-tab="guests"]');
+  await host.waitForSelector('#host-list .row');
+  await host.fill('#hq', ''); await sleep(150);
+  const hostRows = await host.$$eval('#host-list .row', (els) => els.length);
+  ok('host Guests tab shows every guest with no 300 cap', hostRows === total, `${hostRows} rows of ${total}`);
+  ok('host Guests tab has letter dividers', (await host.$$eval('#host-list .letter', (els) => els.length)) > 10);
+
   // door search over 600+ guests is fast and finds imported plus-one by inviter
   const t0 = Date.now();
   await door.fill('#q', 'an');

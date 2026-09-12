@@ -384,7 +384,7 @@ function renderResults() {
 function renderRecent() {
   const ul = $('#recent');
   if (!ul) return;
-  const list = [...S.guests.values()].filter((g) => g.checkedIn && g.checkedInAt).sort((a, b) => (a.checkedInAt < b.checkedInAt ? 1 : -1)).slice(0, 40);
+  const list = [...S.guests.values()].filter((g) => g.checkedIn && g.checkedInAt).sort((a, b) => (a.checkedInAt < b.checkedInAt ? 1 : -1));
   ul.innerHTML = list.length ? list.map((g) => rowHtml(g, { undo: true })).join('') : '<li class="hint">Nobody has been checked in yet.</li>';
 }
 function rowHtml(g, opts = {}) {
@@ -640,12 +640,21 @@ function renderHostGuestList() {
   const f = S.hostFilter || 'all';
   let list = S.hostQuery.trim() ? search(S.hostQuery) : [...S.guests.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
   list = list.filter((g) => f === 'all' || (f === 'pink' && g.pink) || (f === 'walkin' && g.source === 'walkin') || (f === 'notarrived' && !g.checkedIn) || (f === 'arrived' && g.checkedIn) || (f === 'dup' && g._dup));
-  const shown = list.slice(0, 300);
-  ul.innerHTML = (shown.map((g) => {
+  const hostRow = (g) => {
     const p = S.priv.get(g.id) || {};
     const extra = [p.phone ? esc(p.phone) : '', p.email ? esc(p.email) : ''].filter(Boolean).join(' · ');
     return rowHtml(g).replace('</div></div>', `${extra ? `<div class="muted" style="font-size:12px;margin-top:4px">${extra}</div>` : ''}</div></div>`).replace('data-act="open"', 'data-act="edit"').replace(`<button class="btn primary" data-act="open"`, `<button class="btn small" data-act="edit"`).replace('>Check in</button>', '>Edit</button>');
-  }).join('') || '<li class="hint">No one matches.</li>') + (list.length > shown.length ? `<li class="hint">Showing ${shown.length} of ${list.length}. Type to narrow it down.</li>` : '');
+  };
+  if (!list.length) { ul.innerHTML = '<li class="hint">No one matches.</li>'; return; }
+  if (S.hostQuery.trim()) { ul.innerHTML = list.map(hostRow).join(''); return; }
+  // Nothing typed: everyone, A to Z, no cap.
+  let html = `<li class="hint" style="padding:8px 6px 4px">${list.length} ${list.length === 1 ? 'person' : 'people'}. Type to search, or scroll.</li>`, letter = '';
+  for (const g of list) {
+    const L = (norm(g.name)[0] || '#').toUpperCase();
+    if (L !== letter) { letter = L; html += `<li class="letter">${L}</li>`; }
+    html += hostRow(g);
+  }
+  ul.innerHTML = html;
 }
 // ---------- pink wristband management (host) ----------
 function pinkHtml() {
